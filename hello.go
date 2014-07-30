@@ -1,46 +1,35 @@
 package hello
 
 import (
-	//"appengine"
-	//"appengine/user"
-	"fmt"
-	"html/template"
+	"appengine"
+	"appengine/datastore"
+	//"fmt"
+	//"html/template"
 	"net/http"
+	"time"
 )
 
-const guestbookForm = `
-<html>
-  <body>
-    <form action="/sign" method="post">
-      <div><textarea name="content" rows="3" cols="60"></textarea></div>
-      <div><input type="submit" value="Sign Guestbook"></div>
-    </form>
-  </body>
-</html>
-`
+type Greeting struct {
+	Author  string
+	Content string
+	Date    time.Time
+}
 
 func init() {
-	http.HandleFunc("/", handler)
+	http.HandleFunc("/", root)
+	http.HandleFunc("/login", login)
+	http.HandleFunc("/sign", sign)
 }
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, guestbookForm)
-}
-
-const signTemplateHTML = `
-<html>
-  <body>
-    <p>You wrote:</p>
-    <pre>{{.}}</pre>
-  </body>
-</html>
-`
-
-var signTemplate = template.Must(template.New("sign").Parse(signTemplateHTML))
-
-func sign(w http.ResponseWriter, r *http.Request) {
-	err := signTemplate.Execute(w, r.FormValue("content"))
-	if err != nil {
+func root(w http.ResponseWriter, r *http.Request) {
+	c := appengine.NewContext(r)
+	q := datastore.NewQuery("Greeting").Ancestor(guestbookKey(c)).Order("~Date").Limit(10)
+	greetings := make([]Greeting, 0, 10)
+	if _, err := q.GetAll(c, &greetings); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := guestbookTemplate.Execute(w, greetings); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
